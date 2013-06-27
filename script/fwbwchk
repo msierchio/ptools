@@ -1,0 +1,31 @@
+#!/bin/csh
+
+while ( 1 )
+  @ in0 = `snmpget -v2c -c public -OQvt $TGT ifInOctets.$IF`
+  @ tin0 = `date +%s`
+
+  @ out0 = `snmpget -v2c -c public -OQvt $TGT ifOutOctets.$IF`
+  @ tout0 = `date +%s`
+
+  sleep $DELAY
+
+  @ in1 = `snmpget -v2c -c public -OQvt $TGT ifInOctets.$IF`
+  @ tin1 = `date +%s`
+  @ tin = $tin1 - $tin0
+
+  @ out1 = `snmpget -v2c -c public -OQvt $TGT ifOutOctets.$IF`
+  @ tout1 = `date +%s`
+  @ tout = $tout1 - $tout0
+
+  if ( $out0 > $out1 ) then
+    continue
+  endif
+  @ out = ( ( $out1 - $out0 ) / $tout ) * 8
+
+  if ( $in0 > $in1 ) then
+    continue
+  endif
+  @ in = ( ( $in1 - $in0 ) / $tin ) * 8
+
+  logger ${TGT}: bandwidth usage bps_in=$in bps_out=$out
+end

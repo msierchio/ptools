@@ -1,0 +1,48 @@
+#!/bin/csh
+
+set vlan = ( )
+set if = ( )
+set if_in = ( )
+set if_out = ( )
+
+while ( $# > 0 )
+	set vlan = ( $vlan $1 )
+	shift
+	set if_in = ( $if_in ifInOctets.$1 )
+	set if_out = ( $if_out ifOutOctets.$1 )
+	shift
+end
+
+set in0 = ( `snmpget -v2c -c public -OQvt $TGT $if_in` )
+set tin0 = `date +%s` 
+set out0 = ( `snmpget -v2c -c public -OQvt $TGT $if_out` )	
+set tout0 = `date +%s`
+
+while ( 1 )
+	sleep $DELAY
+	
+	set in1 = ( `snmpget -v2c -c public -OQvt $TGT $if_in` )
+	set tin1 = `date +%s`
+	set out1 = ( `snmpget -v2c -c public -OQvt $TGT $if_out` )	
+	set tout1 = `date +%s`
+
+	@ tindiff = $tin1 - $tin0
+	@ toutdiff = $tout1 - $tout0
+
+	@ i = 1
+	while ( $i <= $#vlan )
+		@ bwin = ( $in1[$i] - $in0[$i] ) / $tindiff
+		@ bwout = ( $out1[$i] - $out0[$i] ) / $toutdiff
+                if ($bwin < 0 || $bwout < 0) then
+                        @ i ++
+                        continue
+                endif
+		logger $vlan[$i].sf.pivotallabs.com: bandwidth usage bps_in=$bwin bps_out=$bwout
+		@ i ++
+	end
+	set in0 = ( $in1 )
+	set out0 = ( $out1 )
+	set tin0 = $tin1
+	set tout0 = $tout1
+end
+

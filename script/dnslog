@@ -1,0 +1,91 @@
+#!/usr/bin/perl
+
+use Sys::Syslog qw( :DEFAULT setlogsock);
+
+setlogsock('unix');
+openlog('dnscache','ndelay','LOG_LOCAL5');
+
+my @skipmatch = (
+  qr/sf.pivotallabs.com/,
+  qr/localhost/,
+  qr/10.in-addr.arpa/,
+  qr/1[6-9].172.in-addr.arpa/,
+  qr/2[0-9].172.in-addr.arpa/,
+  qr/3[0-1].172.in-addr.arpa/,
+  qr/168.192.in-addr.arpa/,
+  qr/127.in-addr.arpa/,
+);
+
+while (<>) {
+	if (/query/) {
+	  	s/\b([a-f0-9]{8})\b/join(".", unpack("C*", pack("H8", $1)))/eg;
+  		s/\b([\d.]+):\w+:\w+ (\d+) ([-.\w]+)/printQueryLine($1, $2, $3)/e;
+		s/query [\d.]+ //;
+		if ($_ ~~ @skipmatch) {
+			next;
+		}
+		syslog("info",$_);
+	} 
+}
+
+closelog();
+
+### subs
+
+sub printQueryLine {
+  my ($host, $query_type, $query) = @_;
+
+  # pad hostname
+
+  my $ret = "src_ip=\"$host\" ";
+  $ret .= "query_type=\"" . queryType($query_type) . "\" query=\"$query\"";
+  
+  return $ret;
+}
+
+
+sub queryType {
+  my ($type) = shift;
+  my $ret = "";
+ 
+ SWITCH: {
+	($type == 1) 	&& do { $ret = "a";		last SWITCH; };
+	($type == 2) 	&& do { $ret = "ns";		last SWITCH; };
+	($type == 5) 	&& do { $ret = "cname";		last SWITCH; };
+	($type == 6) 	&& do { $ret = "soa";		last SWITCH; };
+	($type == 12) 	&& do { $ret = "ptr";		last SWITCH; };
+	($type == 15) 	&& do { $ret = "mx";		last SWITCH; };
+	($type == 16) 	&& do { $ret = "txt";		last SWITCH; };
+	($type == 17) 	&& do { $ret = "rp";		last SWITCH; };
+	($type == 18) 	&& do { $ret = "afsdb";		last SWITCH; };
+	($type == 24) 	&& do { $ret = "sig";		last SWITCH; };
+	($type == 25) 	&& do { $ret = "key";		last SWITCH; };
+	($type == 28) 	&& do { $ret = "aaaa";		last SWITCH; };
+	($type == 29) 	&& do { $ret = "loc";		last SWITCH; };
+	($type == 33) 	&& do { $ret = "srv";		last SWITCH; };
+	($type == 35) 	&& do { $ret = "naptr";		last SWITCH; };
+	($type == 36) 	&& do { $ret = "kx";		last SWITCH; };
+	($type == 37) 	&& do { $ret = "cert";		last SWITCH; };
+	($type == 39) 	&& do { $ret = "dname";		last SWITCH; };
+	($type == 42) 	&& do { $ret = "apl";		last SWITCH; };
+	($type == 43) 	&& do { $ret = "ds";		last SWITCH; };
+	($type == 44) 	&& do { $ret = "sshfp";		last SWITCH; };
+	($type == 45) 	&& do { $ret = "ipseckey";	last SWITCH; };
+	($type == 46) 	&& do { $ret = "rrsig";		last SWITCH; };
+	($type == 47) 	&& do { $ret = "nsec";		last SWITCH; };
+	($type == 48) 	&& do { $ret = "dnskey";	last SWITCH; };
+	($type == 49) 	&& do { $ret = "dhcid";		last SWITCH; };
+	($type == 50) 	&& do { $ret = "nsec3";		last SWITCH; };
+	($type == 51) 	&& do { $ret = "nsec3param";	last SWITCH; };
+	($type == 52) 	&& do { $ret = "tlsa";		last SWITCH; };
+	($type == 55) 	&& do { $ret = "hip";		last SWITCH; };
+	($type == 99) 	&& do { $ret = "spf";		last SWITCH; };
+	($type == 249) 	&& do { $ret = "tkey";		last SWITCH; };
+	($type == 250) 	&& do { $ret = "tsig";		last SWITCH; };
+	($type == 257) 	&& do { $ret = "caa";		last SWITCH; };
+    do { $ret .= "$type "; last SWITCH; };
+  }
+  return $ret;
+}
+
+

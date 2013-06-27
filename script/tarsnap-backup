@@ -1,0 +1,102 @@
+#!/bin/sh
+
+#OPTS="--dry-run"
+OPTS=""
+ERREXT=0
+FSLIST=$*
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin
+
+# script intended strictly for UFS2 w/snapshots enabled
+
+if [ $# -lt 1 ]; then
+	echo "usage: `basename $0` <filesystem> { .. <filesystem> }"
+	exit 22
+fi
+
+alist=`tarsnap --list-archives`
+
+if [ $( TZ=$( date +%Z )-24 date +%d ) -eq 1 ]; then
+	TYPE=0	# it's the last day of the month
+elif [ $( date +%u ) -eq 7 ]; then
+	TYPE=1	# it's Sunday
+else
+	TYPE=2	# it's M-F and not the last day of the month
+fi
+
+for fs in $FSLIST; do
+	if [ "$fs" = "/" ]; then
+		arch="root"
+	else
+		arch="`echo $fs | sed 's#^/##'`"
+		arch="`echo $arch | sed 's#/#_#g'`"
+	fi
+
+	case $TYPE in
+	0)
+		nm="monthly.${arch}.$(date +%Y%m%d%H%M%S)"
+		;;
+	1)
+		nm="weekly.${arch}.$(date +%Y%m%d%H%M%S)"
+		;;
+	*)
+		nm="daily.${arch}.$(date +%Y%m%d%H%M%S)"
+		;;
+	esac
+
+# create a tempfile with a convenient name
+	cd /tmp
+	TF=`mktemp tarsnap.XXXXX`
+        if [ $? -ne 0 ]; then
+                echo "$0: Can't create temp file"
+                exit 73
+        fi
+
+# make mount point for mfs, make snapshot, mount it
+	mkdir -p /$TF
+	mksnap_ffs $fs/.snap/$TF
+	MU=`mdconfig -a -t vnode -o readonly -f ${fs}/.snap/$TF`
+	mount -o ro /dev/$MU /$TF
+
+	echo "`date`	creating: $nm"
+	cd /$TF
+	tarsnap ${OPTS} --one-file-system --snaptime /tmp/$TF -c -f $nm .
+	ret=$?
+	cd /
+
+	umount /$TF
+	rmdir /$TF
+	MU=`echo $MU | sed 's/md//'`
+	mdconfig -d -u $MU
+	rm -f $fs/.snap/$TF
+	rm -f /tmp/$TF
+
+	if [ $ret -eq 0 ]; then
+	case $TYPE in
+	0)
+		for tbd in $alist; do
+			x=$(echo $tbd | grep weekly.${arch})
+			if [ "X$x" != "X" ]; then
+			echo "deleting archive: $tbd"
+			tarsnap $OPTS -d -f $tbd
+			fi
+		done
+		;;
+	1)
+		for tbd in $alist; do
+			x=$(echo $tbd | grep daily.${arch})
+			if [ "X$x" != "X" ]; then
+			echo "deleting archive: $tbd"
+			tarsnap $OPTS -d -f $tbd
+		
+			fi
+		done
+		;;
+	*)
+		;;
+	esac 
+	fi
+
+done
+
+exit $ERREXT
+
