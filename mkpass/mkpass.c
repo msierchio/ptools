@@ -65,7 +65,7 @@
  */
 
 static char alf[] = {
-    '+', '-',
+    '$', '%',
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
     'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
@@ -78,10 +78,9 @@ int main(int argc, char *argv[]) {
     int i, n, fd;
     unsigned char   c, rbits[512];
 
+    n = 16;
     if (argc > 1)
         n = atoi(argv[1]);
-    else
-        n = 16;
 
     if (n < 8)
         n = 8;
