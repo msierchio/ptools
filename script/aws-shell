@@ -1,7 +1,5 @@
 #!/bin/sh
 
-# ROLE="radmin"
-
 CALLER_ID=`aws sts get-caller-identity`
 if [ $? -ne 0 ]; then
     echo "Can't get caller identity"
@@ -52,5 +50,6 @@ export AWS_SECRET_ACCESS_KEY
 AWS_SESSION_TOKEN=`echo $CREDS | jq -r '.Credentials.SessionToken'`
 export AWS_SESSION_TOKEN
 
+IEOF=1 ; export IEOF
 exec $SHELL
 
