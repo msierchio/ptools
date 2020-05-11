@@ -51,5 +51,6 @@ AWS_SESSION_TOKEN=`echo $CREDS | jq -r '.Credentials.SessionToken'`
 export AWS_SESSION_TOKEN
 
 IEOF=1 ; export IEOF
+ignoreeof=1 
 exec $SHELL
 
