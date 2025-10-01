@@ -1,0 +1,113 @@
+#!/bin/sh
+
+########################################################################
+#
+# aws-shell – spawn a shell with AWS role credentials
+#
+# Assumptions:
+#
+#   ambient credentials in environment variables or ~/.aws/credentials
+#   belonging to an IAM user of the form AKIAXXXXXXXXXXXXXXXX
+#   jq and awscli installed via homebrew (brew install jq awscli)
+#
+# Usage: aws-shell [--profile <profile name in credentials file>]
+#
+# Example:
+#
+# michael@michaels-Apple-Macbook-Pro:~ 201> aws sts get-caller-identity 
+# {
+#     "UserId": "AIDATM343HX3G7CPZ4D73",
+#     "Account": "233800678902",
+#     "Arn": "arn:aws:iam::233800678902:user/msierchio"
+# }
+# michael@michaels-Apple-Macbook-Pro:~ 202> aws-shell
+# Role Name: Administrator
+# token code: [six digits, no CR]
+# michael@michaels-Apple-Macbook-Pro:~ 201> aws sts get-caller-identity
+# {
+#     "UserId": "AROATM343HX3O5V5I5PJL:msierchio-20250926T141133Z",
+#     "Account": "233800678902",
+#     "Arn": "arn:aws:sts::233800678902:assumed-role/Administrator/msierchio-20250926T141133Z"
+# }
+# 
+########################################################################
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        --profile)
+            shift
+            AWS_PROFILE=$1
+            export AWS_PROFILE
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+CALLER_ID=`aws sts get-caller-identity`
+if [ $? -ne 0 ]; then
+    echo "Can't get caller identity"
+    exit 77
+fi
+
+ACCT=`echo ${CALLER_ID} | jq -r '.Account'`
+AWS_USER_ID=`echo ${CALLER_ID} | jq -r '.UserId'`
+
+UID_PFX=`echo $AWS_USER_ID | cut -c 1-4`
+case $UID_PFX in
+    AIDA )
+        # things look good
+        ;;
+    * )
+        echo "Ambient credentials do not belong to an IAM user"
+        exit 77
+        ;;
+esac
+
+AWS_USER=`echo ${CALLER_ID} | jq -r '.Arn'`
+AWS_USER=`basename $AWS_USER`
+
+TS=`date -u +%Y%m%dT%H%M%SZ`
+RSN="$AWS_USER-$TS"
+
+AWS_MFA_SERIAL=`aws iam list-virtual-mfa-devices |\
+    jq -r --arg AWS_USER $AWS_USER '.VirtualMFADevices[] |\
+    select(.User.UserName == $AWS_USER).SerialNumber'`
+
+read -p 'Role Name: ' ROLE
+read -p 'token code: ' -n 6 TOKEN_CODE
+echo
+
+CREDS=`aws sts assume-role \
+    --role-arn arn:aws:iam::${ACCT}:role/${ROLE} \
+    --role-session-name $RSN \
+    --serial-number $AWS_MFA_SERIAL \
+    --duration-seconds 3600 \
+    --token-code $TOKEN_CODE`
+
+if [ $? != 0 ]; then
+    echo
+    echo "aws sts assume-role failed"
+    exit 75
+fi
+
+AWS_ACCESS_KEY_ID=`echo $CREDS | jq -r '.Credentials.AccessKeyId'`
+export AWS_ACCESS_KEY_ID
+
+AWS_SECRET_ACCESS_KEY=`echo $CREDS | jq -r '.Credentials.SecretAccessKey'`
+export AWS_SECRET_ACCESS_KEY
+
+AWS_SESSION_TOKEN=`echo $CREDS | jq -r '.Credentials.SessionToken'`
+export AWS_SESSION_TOKEN
+
+AWS_SESSION_EXPIRATION=`echo $CREDS | jq -r '.Credentials.Expiration'`
+export AWS_SESSION_EXPIRATION
+
+unset AWS_PROFILE
+unset AWS_DEFAULT_PROFILE
+
+IEOF=1 ; export IEOF
+ignoreeof=1 
+exec $SHELL
+
